@@ -74,10 +74,10 @@ After installation, reload VS Code.
 
 ```bash
 git clone <repo-url>
-cd vscode-jira-mcp
+cd jira_mcp_server
 npm install
 node esbuild.mjs
-npx vsce package --no-dependencies
+npm run package
 code --install-extension jira-mcp-1.0.0.vsix
 ```
 
