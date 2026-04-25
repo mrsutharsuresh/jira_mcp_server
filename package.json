@@ -1,0 +1,107 @@
+{
+  "name": "jira-mcp",
+  "displayName": "JIRA MCP Server",
+  "description": "JIRA tools for GitHub Copilot and AI assistants via MCP (Model Context Protocol). Search, create, update JIRA issues directly from your AI chat.",
+  "version": "1.0.0",
+  "publisher": "vscode-jira-mcp",
+  "engines": {
+    "vscode": "^1.99.0"
+  },
+  "categories": [
+    "AI",
+    "Other"
+  ],
+  "keywords": [
+    "jira",
+    "mcp",
+    "copilot",
+    "ai",
+    "model-context-protocol",
+    "issue-tracker"
+  ],
+  "icon": "icon.png",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/your-org/vscode-jira-mcp"
+  },
+  "main": "./dist/extension.js",
+  "contributes": {
+    "mcpServers": {
+      "jira": {
+        "command": "node",
+        "args": [
+          "${extensionPath}/dist/server.js"
+        ],
+        "env": {
+          "JIRA_URL": "${config:jira-mcp.jiraUrl}",
+          "JIRA_USERNAME": "${config:jira-mcp.username}",
+          "JIRA_TOKEN": "${command:jira-mcp.getToken}",
+          "WORKSPACE_FOLDER": "${workspaceFolder}"
+        }
+      }
+    },
+    "configuration": {
+      "title": "JIRA MCP",
+      "properties": {
+        "jira-mcp.jiraUrl": {
+          "type": "string",
+          "default": "",
+          "description": "JIRA server URL (e.g. https://jira.example.com)",
+          "order": 1
+        },
+        "jira-mcp.username": {
+          "type": "string",
+          "default": "",
+          "description": "Your JIRA username or email address",
+          "order": 2
+        }
+      }
+    },
+    "commands": [
+      {
+        "command": "jira-mcp.configure",
+        "title": "Configure JIRA Connection",
+        "category": "JIRA MCP"
+      },
+      {
+        "command": "jira-mcp.clearCredentials",
+        "title": "Clear Saved Credentials",
+        "category": "JIRA MCP"
+      },
+      {
+        "command": "jira-mcp.testConnection",
+        "title": "Test JIRA Connection",
+        "category": "JIRA MCP"
+      },
+      {
+        "command": "jira-mcp.getToken",
+        "title": "Get JIRA Token (Internal)",
+        "category": "JIRA MCP"
+      }
+    ]
+  },
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "scripts": {
+    "build": "node esbuild.mjs",
+    "watch": "node esbuild.mjs --watch",
+    "package": "vsce package --no-dependencies",
+    "lint": "eslint src --ext ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/vscode": "^1.99.0",
+    "@vscode/vsce": "^3.0.0",
+    "esbuild": "^0.25.0",
+    "typescript": "^5.4.0"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.10.0",
+    "axios": "^1.6.0",
+    "form-data": "^4.0.0",
+    "zod": "^3.22.0"
+  }
+}

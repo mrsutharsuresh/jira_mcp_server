@@ -1,0 +1,15 @@
+src/
+out/
+node_modules/
+.env
+*.ts
+!dist/**
+*.map
+.vscode-test/
+*.webp
+VSCODE-EXTENSION-CONTEXT.md
+test-mcp.mjs
+jira-attachments/
+*.zip
+npm-debug.log
+Full_Size_Icon.webp
