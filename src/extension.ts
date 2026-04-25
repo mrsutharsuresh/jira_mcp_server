@@ -125,6 +125,7 @@ function buildAxiosConfig(pat: string, extraOptions: Partial<AxiosRequestConfig>
 const CONFIG_SECTION = "jira-mcp";
 
 let statusBarItem: vscode.StatusBarItem;
+let mcpChangeEmitter: vscode.EventEmitter<void>;
 
 export function activate(context: vscode.ExtensionContext): void {
   // Output channel — always created first so all subsequent code can log
@@ -156,6 +157,73 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand("jira-mcp.getToken", () =>
       getToken(context)
     )
+  );
+
+  // ── MCP server definition provider ────────────────────────────────────────
+  mcpChangeEmitter = new vscode.EventEmitter<void>();
+  context.subscriptions.push(mcpChangeEmitter);
+
+  context.subscriptions.push(
+    vscode.lm.registerMcpServerDefinitionProvider("jira-mcp-provider", {
+      onDidChangeMcpServerDefinitions: mcpChangeEmitter.event,
+
+      async provideMcpServerDefinitions(_token) {
+        const config = vscode.workspace.getConfiguration(CONFIG_SECTION);
+        const jiraUrl = config.get<string>("jiraUrl") || "";
+        if (!jiraUrl) return [];
+
+        const username = config.get<string>("username") || "";
+        const serverPath = context.asAbsolutePath("dist/server.js");
+        log(`MCP provideMcpServerDefinitions: jiraUrl=${jiraUrl}, serverPath=${serverPath}`);
+
+        return [
+          new vscode.McpStdioServerDefinition(
+            "JIRA MCP",
+            "node",
+            [serverPath],
+            {
+              JIRA_URL: jiraUrl,
+              JIRA_USERNAME: username,
+              // PAT injected in resolveMcpServerDefinition
+              JIRA_TOKEN: "",
+            }
+          ),
+        ];
+      },
+
+      async resolveMcpServerDefinition(server, _token) {
+        const pat = await context.secrets.get(SECRET_KEY);
+        if (!pat) {
+          vscode.window
+            .showWarningMessage(
+              "JIRA MCP: No PAT configured. Run 'JIRA MCP: Configure JIRA Connection'.",
+              "Configure Now"
+            )
+            .then((action) => {
+              if (action === "Configure Now") runConfigure(context);
+            });
+          return undefined; // Abort server start
+        }
+
+        if (server instanceof vscode.McpStdioServerDefinition) {
+          const config = vscode.workspace.getConfiguration(CONFIG_SECTION);
+          const jiraUrl = config.get<string>("jiraUrl") || "";
+          const username = config.get<string>("username") || "";
+          log(`MCP resolveMcpServerDefinition: injecting PAT for ${jiraUrl}`);
+          return new vscode.McpStdioServerDefinition(
+            server.label,
+            server.command,
+            server.args ?? [],
+            {
+              JIRA_URL: jiraUrl,
+              JIRA_USERNAME: username,
+              JIRA_TOKEN: pat,
+            }
+          );
+        }
+        return server;
+      },
+    })
   );
 
   // Set initial status bar state
@@ -283,6 +351,7 @@ async function promptForUrl(
     value.replace(/\/$/, ""),
     vscode.ConfigurationTarget.Global
   );
+  mcpChangeEmitter?.fire(); // URL changed — refresh MCP server list
   return value.replace(/\/$/, "");
 }
 
@@ -358,6 +427,7 @@ async function promptForPat(
         }
 
         await context.secrets.store(SECRET_KEY, pat.trim());
+        mcpChangeEmitter?.fire(); // Notify VS Code to (re)start the MCP server
         const displayName: string =
           response.data?.displayName || username;
         log(`Connected as: ${displayName}`);
@@ -397,6 +467,7 @@ async function runClearCredentials(
     vscode.ConfigurationTarget.Global
   );
 
+  mcpChangeEmitter?.fire(); // Notify VS Code to stop the MCP server
   updateStatusBar(context);
   vscode.window.showInformationMessage("JIRA MCP: Credentials cleared.");
 }

@@ -2,8 +2,8 @@
   "name": "jira-mcp",
   "displayName": "Jira MCP Server",
   "description": "Secure Jira MCP server for GitHub Copilot: search, create, comment, transition issues, attachments, and custom fields via MCP.",
-  "version": "1.0.0",
-  "publisher": "mrsutharsuresh",
+  "version": "1.0.1",
+  "publisher": "SutharLabs",
   "author": "Suresh Suthar <mr.sutharsuresh@gmail.com>",
   "engines": {
     "vscode": "^1.99.0"
@@ -22,27 +22,18 @@
   ],
   "icon": "icon.png",
   "license": "MIT",
-  "author": "mrsutharsuresh",
   "repository": {
     "type": "git",
     "url": "https://github.com/mrsutharsuresh/jira_mcp_server.git"
   },
   "main": "./dist/extension.js",
   "contributes": {
-    "mcpServers": {
-      "jira": {
-        "command": "node",
-        "args": [
-          "${extensionPath}/dist/server.js"
-        ],
-        "env": {
-          "JIRA_URL": "${config:jira-mcp.jiraUrl}",
-          "JIRA_USERNAME": "${config:jira-mcp.username}",
-          "JIRA_TOKEN": "${command:jira-mcp.getToken}",
-          "WORKSPACE_FOLDER": "${workspaceFolder}"
-        }
+    "mcpServerDefinitionProviders": [
+      {
+        "id": "jira-mcp-provider",
+        "label": "JIRA MCP Server"
       }
-    },
+    ],
     "configuration": {
       "title": "JIRA MCP",
       "properties": {
@@ -74,11 +65,6 @@
       {
         "command": "jira-mcp.testConnection",
         "title": "Test JIRA Connection",
-        "category": "JIRA MCP"
-      },
-      {
-        "command": "jira-mcp.getToken",
-        "title": "Get JIRA Token (Internal)",
         "category": "JIRA MCP"
       }
     ]
