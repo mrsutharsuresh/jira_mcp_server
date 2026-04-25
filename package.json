@@ -1,9 +1,10 @@
 {
   "name": "jira-mcp",
-  "displayName": "JIRA MCP Server",
-  "description": "JIRA tools for GitHub Copilot and AI assistants via MCP (Model Context Protocol). Search, create, update JIRA issues directly from your AI chat.",
+  "displayName": "Jira MCP for Copilot",
+  "description": "Secure Jira MCP server for GitHub Copilot: search, create, comment, transition issues, attachments, and custom fields via MCP.",
   "version": "1.0.0",
-  "publisher": "vscode-jira-mcp",
+  "publisher": "mrsutharsuresh",
+  "author": "Suresh Suthar <mr.sutharsuresh@gmail.com>",
   "engines": {
     "vscode": "^1.99.0"
   },
