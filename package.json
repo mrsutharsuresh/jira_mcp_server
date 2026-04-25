@@ -21,9 +21,10 @@
   ],
   "icon": "icon.png",
   "license": "MIT",
+  "author": "mrsutharsuresh",
   "repository": {
     "type": "git",
-    "url": "https://github.com/your-org/vscode-jira-mcp"
+    "url": "https://github.com/mrsutharsuresh/jira_mcp_server.git"
   },
   "main": "./dist/extension.js",
   "contributes": {

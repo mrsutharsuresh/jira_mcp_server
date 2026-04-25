@@ -1,5 +1,7 @@
 # JIRA MCP Server
 
+Created by `mrsutharsuresh`.
+
 Connect GitHub Copilot and AI assistants to your JIRA instance via the [Model Context Protocol (MCP)](https://modelcontextprotocol.io/).
 
 ---
