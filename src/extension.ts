@@ -179,9 +179,10 @@ export function activate(context: vscode.ExtensionContext): void {
         return [
           new vscode.McpStdioServerDefinition(
             "JIRA MCP",
-            "node",
+            process.execPath,
             [serverPath],
             {
+              ELECTRON_RUN_AS_NODE: "1",
               JIRA_URL: jiraUrl,
               JIRA_USERNAME: username,
               // PAT injected in resolveMcpServerDefinition
@@ -215,6 +216,7 @@ export function activate(context: vscode.ExtensionContext): void {
             server.command,
             server.args ?? [],
             {
+              ...(server.env ?? {}),
               JIRA_URL: jiraUrl,
               JIRA_USERNAME: username,
               JIRA_TOKEN: pat,

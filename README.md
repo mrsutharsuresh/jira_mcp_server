@@ -1,4 +1,4 @@
-﻿# Jira MCP for Copilot
+# Jira MCP for Copilot
 
 Built by **Suresh Suthar** — `mr.sutharsuresh@gmail.com`
 
@@ -37,6 +37,7 @@ Use natural language from Copilot to search issues, create tickets, add comments
 | Requirement | Details |
 |-------------|---------|
 | **VS Code** | Version 1.99.0 or later |
+| **Node.js** | Node.js must be installed on your system |
 | **GitHub Copilot** | Copilot Chat extension installed and signed in |
 | **Jira** | Jira Server or Data Center with REST API access |
 | **Authentication** | Jira Personal Access Token (PAT) |

@@ -2,7 +2,7 @@
   "name": "jira-mcp",
   "displayName": "Jira MCP Server",
   "description": "Secure Jira MCP server for GitHub Copilot: search, create, comment, transition issues, attachments, and custom fields via MCP.",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "publisher": "SutharLabs",
   "author": "Suresh Suthar <mr.sutharsuresh@gmail.com>",
   "engines": {
