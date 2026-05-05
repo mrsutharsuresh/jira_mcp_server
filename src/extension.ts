@@ -174,7 +174,15 @@ export function activate(context: vscode.ExtensionContext): void {
 
         const username = config.get<string>("username") || "";
         const serverPath = context.asAbsolutePath("dist/server.js");
+
+        // Resolve the active workspace folder so the MCP server can write
+        // attachments into it. Falls back to the extension's install dir if no
+        // folder is open (unusual, but shouldn't crash).
+        const workspaceFolder =
+          vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ??
+          context.extensionPath;
         log(`MCP provideMcpServerDefinitions: jiraUrl=${jiraUrl}, serverPath=${serverPath}`);
+        log(`MCP provideMcpServerDefinitions: workspaceFolder=${workspaceFolder}`);
 
         return [
           new vscode.McpStdioServerDefinition(
@@ -185,6 +193,7 @@ export function activate(context: vscode.ExtensionContext): void {
               ELECTRON_RUN_AS_NODE: "1",
               JIRA_URL: jiraUrl,
               JIRA_USERNAME: username,
+              WORKSPACE_FOLDER: workspaceFolder,
               // PAT injected in resolveMcpServerDefinition
               JIRA_TOKEN: "",
             }

@@ -109,21 +109,66 @@ export async function downloadAttachmentHandler(
 
   const buffer = await client.downloadAttachment(meta.content);
 
-  // ── Save to workspace ──────────────────────────────────────────────────────
-  // WORKSPACE_FOLDER is injected by VS Code via ${workspaceFolder} in
-  // contributes.mcpServers env. Fall back to cwd() when running outside VS Code
-  // (e.g. in tests or CLI usage).
+  // ── Resolve download directory ─────────────────────────────────────────────
+  // WORKSPACE_FOLDER is injected by the VS Code extension via
+  // McpStdioServerDefinition env. It points to the user's open workspace.
+  // Falls back to process.cwd() when running outside VS Code (tests / CLI).
   const workspaceFolder = process.env["WORKSPACE_FOLDER"] || process.cwd();
   const attachmentsDir = path.join(workspaceFolder, "jira-attachments");
 
+  process.stderr.write(
+    `[jira-mcp] download_attachment: workspaceFolder="${workspaceFolder}" attachmentsDir="${attachmentsDir}"\n`
+  );
+
+  // ── Create directory ───────────────────────────────────────────────────────
   if (!fs.existsSync(attachmentsDir)) {
-    fs.mkdirSync(attachmentsDir, { recursive: true });
+    try {
+      fs.mkdirSync(attachmentsDir, { recursive: true });
+    } catch (mkdirErr: unknown) {
+      const e = mkdirErr as NodeJS.ErrnoException;
+      const detail = `code=${e.code ?? "?"} syscall=${e.syscall ?? "?"} path="${e.path ?? attachmentsDir}"` ;
+      process.stderr.write(
+        `[jira-mcp] ERROR: Failed to create attachments directory. ${detail}\n`
+      );
+      return JSON.stringify(
+        {
+          success: false,
+          error: `Cannot create download directory at "${attachmentsDir}". ${detail}`,
+          hint: `Ensure the workspace folder is writable, or check that a workspace is open in VS Code. WORKSPACE_FOLDER env was: "${workspaceFolder}"`,
+        },
+        null,
+        2
+      );
+    }
   }
 
+  // ── Write file ────────────────────────────────────────────────────────────
   // Use issue_key prefix to avoid collisions across issues
   const safeFilename = `${issue_key}_${meta.filename}`;
   const localPath = path.join(attachmentsDir, safeFilename);
-  fs.writeFileSync(localPath, buffer);
+
+  try {
+    fs.writeFileSync(localPath, buffer);
+  } catch (writeErr: unknown) {
+    const e = writeErr as NodeJS.ErrnoException;
+    const detail = `code=${e.code ?? "?"} syscall=${e.syscall ?? "?"} path="${e.path ?? localPath}"`;
+    process.stderr.write(
+      `[jira-mcp] ERROR: Failed to write attachment file. ${detail}\n`
+    );
+    return JSON.stringify(
+      {
+        success: false,
+        error: `Cannot write attachment to "${localPath}". ${detail}`,
+        hint: `Ensure the workspace folder is writable and that there is sufficient disk space. WORKSPACE_FOLDER env was: "${workspaceFolder}"`,
+      },
+      null,
+      2
+    );
+  }
+
+  process.stderr.write(
+    `[jira-mcp] download_attachment: saved "${localPath}" (${formatBytes(meta.size)})\n`
+  );
 
   return JSON.stringify(
     {

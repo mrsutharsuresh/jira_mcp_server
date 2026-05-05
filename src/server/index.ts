@@ -84,12 +84,27 @@ async function main(): Promise<void> {
             content: [{ type: "text" as const, text }],
           };
         } catch (err: unknown) {
-          const message = err instanceof Error ? err.message : String(err);
+          // Build a rich error object that includes Node.js fs errno fields
+          // (code, syscall, path) when present — these are exactly what gets
+          // reported as 'UNKNOWN: unknown error, write' without this treatment.
+          const isErrno = err instanceof Error && "code" in err;
+          const e = err as NodeJS.ErrnoException;
+          const errorPayload: Record<string, unknown> = {
+            error: e.message ?? String(err),
+          };
+          if (isErrno) {
+            if (e.code) errorPayload.code = e.code;
+            if (e.syscall) errorPayload.syscall = e.syscall;
+            if (e.path) errorPayload.path = e.path;
+          }
+          process.stderr.write(
+            `[jira-mcp] Tool error (${def.name}): ${JSON.stringify(errorPayload)}\n`
+          );
           return {
             content: [
               {
                 type: "text" as const,
-                text: JSON.stringify({ error: message }, null, 2),
+                text: JSON.stringify(errorPayload, null, 2),
               },
             ],
             isError: true,
@@ -108,8 +123,14 @@ async function main(): Promise<void> {
 }
 
 main().catch((err: unknown) => {
-  process.stderr.write(
-    `[jira-mcp] Fatal error: ${err instanceof Error ? err.message : String(err)}\n`
-  );
+  const isErrno = err instanceof Error && "code" in err;
+  const e = err as NodeJS.ErrnoException;
+  const parts: string[] = [err instanceof Error ? err.message : String(err)];
+  if (isErrno) {
+    if (e.code) parts.push(`code=${e.code}`);
+    if (e.syscall) parts.push(`syscall=${e.syscall}`);
+    if (e.path) parts.push(`path=${e.path}`);
+  }
+  process.stderr.write(`[jira-mcp] Fatal error: ${parts.join(" ")}\n`);
   process.exit(1);
 });
