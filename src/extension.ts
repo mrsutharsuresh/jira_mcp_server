@@ -1,5 +1,8 @@
 import * as vscode from "vscode";
 import axios, { type AxiosRequestConfig } from "axios";
+import * as fs from "fs";
+import * as path from "path";
+import * as os from "os";
 
 const SECRET_KEY = "jira-mcp.pat";
 
@@ -94,16 +97,25 @@ function buildAxiosConfig(pat: string, extraOptions: Partial<AxiosRequestConfig>
     "";
   const proxyUrl = vscodeProxy || envProxy;
 
+  const config = vscode.workspace.getConfiguration("jira-mcp");
+  const jiraUrl = config.get<string>("jiraUrl") || "";
+  const username = config.get<string>("username") || "";
+
+  const isCloud = jiraUrl.includes(".atlassian.net");
+  const authHeader = isCloud
+    ? `Basic ${Buffer.from(`${username.trim()}:${pat.trim()}`).toString("base64")}`
+    : `Bearer ${pat.trim()}`;
+
   log(`buildAxiosConfig: vscode http.proxy="${vscodeProxy}" env proxy="${envProxy}" → using="${proxyUrl || "(none, direct)"}"`);
 
   const cfg: AxiosRequestConfig = {
-    headers: { Authorization: `Bearer ${pat.slice(0, 6)}…` }, // log safe
+    headers: { Authorization: isCloud ? "Basic [redacted]" : `Bearer ${pat.slice(0, 6)}…` }, // log safe
     timeout: 30000,
     maxRedirects: 5,
     ...extraOptions,
   };
   // Re-add real token (log-safe copy used above only for logging)
-  (cfg.headers as Record<string, string>)["Authorization"] = `Bearer ${pat}`;
+  (cfg.headers as Record<string, string>)["Authorization"] = authHeader;
 
   if (proxyUrl) {
     try {
@@ -134,6 +146,13 @@ export function activate(context: vscode.ExtensionContext): void {
   log("Extension activated");
   log(`VS Code version : ${vscode.version}`);
   log(`Platform        : ${process.platform} / Node ${process.version}`);
+
+  // Synchronize configuration to forks on startup if credentials exist
+  context.secrets.get(SECRET_KEY).then((token) => {
+    if (token) {
+      void syncForkConfigs(context, token);
+    }
+  });
 
   // Status bar
   statusBarItem = vscode.window.createStatusBarItem(
@@ -438,6 +457,7 @@ async function promptForPat(
         }
 
         await context.secrets.store(SECRET_KEY, pat.trim());
+        void syncForkConfigs(context, pat.trim());
         mcpChangeEmitter?.fire(); // Notify VS Code to (re)start the MCP server
         const displayName: string =
           response.data?.displayName || username;
@@ -470,6 +490,7 @@ async function runClearCredentials(
   if (confirm !== "Clear Credentials") return;
 
   await context.secrets.delete(SECRET_KEY);
+  void syncForkConfigs(context, undefined);
   const config = vscode.workspace.getConfiguration(CONFIG_SECTION);
   await config.update("jiraUrl", undefined, vscode.ConfigurationTarget.Global);
   await config.update(
@@ -594,4 +615,111 @@ async function updateStatusBar(
     }
   }
   statusBarItem.show();
+}
+
+async function syncForkConfigs(
+  context: vscode.ExtensionContext,
+  token: string | undefined
+): Promise<void> {
+  const config = vscode.workspace.getConfiguration(CONFIG_SECTION);
+  const jiraUrl = config.get<string>("jiraUrl") || "";
+  const username = config.get<string>("username") || "";
+  const serverPath = context.asAbsolutePath("dist/server.js");
+  const workspaceFolder =
+    vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ??
+    context.extensionPath;
+
+  const homedir = os.homedir();
+  const configFiles: { path: string; isClaude?: boolean; isGemini?: boolean }[] = [];
+
+  // Antigravity
+  configFiles.push({
+    path: path.join(homedir, ".gemini", "antigravity", "mcp_config.json"),
+    isGemini: true
+  });
+  // KIRO
+  configFiles.push({
+    path: path.join(homedir, ".gemini", "kiro", "mcp_config.json"),
+    isGemini: true
+  });
+  // Cursor
+  if (process.platform === "win32") {
+    configFiles.push({
+      path: path.join(process.env.APPDATA || "", "Cursor", "User", "globalStorage", "tongshuai.cursor-chat", "mcp_config.json")
+    });
+  } else if (process.platform === "darwin") {
+    configFiles.push({
+      path: path.join(homedir, "Library", "Application Support", "Cursor", "User", "globalStorage", "tongshuai.cursor-chat", "mcp_config.json")
+    });
+  } else {
+    configFiles.push({
+      path: path.join(homedir, ".config", "Cursor", "User", "globalStorage", "tongshuai.cursor-chat", "mcp_config.json")
+    });
+  }
+  // Claude Desktop
+  if (process.platform === "win32") {
+    configFiles.push({
+      path: path.join(process.env.APPDATA || "", "Claude", "claude_desktop_config.json"),
+      isClaude: true
+    });
+  } else if (process.platform === "darwin") {
+    configFiles.push({
+      path: path.join(homedir, "Library", "Application Support", "Claude", "claude_desktop_config.json"),
+      isClaude: true
+    });
+  }
+
+  for (const item of configFiles) {
+    const dir = path.dirname(item.path);
+    if (!fs.existsSync(dir)) {
+      continue;
+    }
+
+    try {
+      let data: any = {};
+      if (fs.existsSync(item.path)) {
+        try {
+          data = JSON.parse(fs.readFileSync(item.path, "utf8"));
+        } catch (e) {
+          data = {};
+        }
+      }
+
+      if (!data.mcpServers) {
+        data.mcpServers = {};
+      }
+
+      const mcpKey = "jira-mcp";
+      if (token && jiraUrl) {
+        const command = vscode.env.remoteName ? process.execPath : "node";
+        const env: Record<string, string> = {
+          JIRA_URL: jiraUrl,
+          JIRA_USERNAME: username,
+          WORKSPACE_FOLDER: workspaceFolder,
+          JIRA_TOKEN: token
+        };
+        if (command === process.execPath) {
+          env["ELECTRON_RUN_AS_NODE"] = "1";
+        }
+        data.mcpServers[mcpKey] = {
+          command: command,
+          args: [serverPath],
+          env: env
+        };
+
+        if (item.isGemini) {
+          data.mcpServers[mcpKey]["$typeName"] = "exa.cascade_plugins_pb.CascadePluginCommandTemplate";
+        }
+      } else {
+        if (data.mcpServers[mcpKey]) {
+          delete data.mcpServers[mcpKey];
+        }
+      }
+
+      fs.writeFileSync(item.path, JSON.stringify(data, null, 2), "utf8");
+      log(`Synced JIRA MCP config successfully at: ${item.path}`);
+    } catch (err) {
+      logError(`Failed to sync JIRA config at ${item.path}`, err);
+    }
+  }
 }

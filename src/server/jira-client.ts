@@ -115,10 +115,16 @@ export class JiraClient {
   constructor(jiraUrl: string, token: string, username: string) {
     this.jiraUrl = jiraUrl.replace(/\/$/, "");
     this.username = username;
+
+    const isCloud = this.jiraUrl.includes(".atlassian.net") || process.env.JIRA_AUTH_MODE === "basic";
+    const authHeader = isCloud
+      ? `Basic ${Buffer.from(`${username.trim()}:${token.trim()}`).toString("base64")}`
+      : `Bearer ${token.trim()}`;
+
     this.http = axios.create({
       baseURL: `${this.jiraUrl}/rest/api/2`,
       headers: {
-        Authorization: `Bearer ${token}`,
+        Authorization: authHeader,
         "Content-Type": "application/json",
         Accept: "application/json",
       },

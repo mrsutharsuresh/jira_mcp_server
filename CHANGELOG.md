@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.0.4] — 2026-05-19
+
+### Added
+- **Jira Cloud (API Token) Support**: Implemented automatic dual-authentication mode. The client now dynamically detects your hosting target: Jira Cloud instances (URLs containing `.atlassian.net`) automatically utilize Basic Auth with `email:API_token`, while Jira Server and Data Center continue to leverage secure Personal Access Tokens (`Bearer ${token}`).
+- **Automatic Sync to VS Code Forks & Clients**: Implemented automatic registration and settings synchronization for popular AI-focused VS Code forks and external clients. The extension automatically writes, updates, or deletes the `jira-mcp` server registration in local settings configurations (`mcp_config.json` or `claude_desktop_config.json`) for:
+  - **Antigravity**
+  - **KIRO**
+  - **Cursor**
+  - **Claude Desktop**
+
+### Improved
+- **Robust Dynamic Execution Path**: Updated the spawned MCP server configuration command. It now dynamically checks the environment: on remote hosts (WSL, SSH, Dev Containers), it resolves to **`process.execPath`** to execute on the identical modern Node.js engine running the VS Code Server (eliminating potential startup syntax crashes due to outdated system-wide Node versions); on local environments, it falls back to standard system **`node`** (allowing local clients like Claude Desktop or Antigravity to spawn the server smoothly without relying on the VS Code Electron binary).
+
 ## [1.0.3] — 2026-05-05
 
 ### Fixed
