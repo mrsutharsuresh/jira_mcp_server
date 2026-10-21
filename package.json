@@ -2,12 +2,15 @@
   "name": "jira-mcp",
   "displayName": "Jira MCP Server",
   "description": "Secure Jira MCP server for GitHub Copilot: search, create, comment, transition issues, attachments, and custom fields via MCP.",
-  "version": "1.0.4",
+  "version": "1.0.5",
+  "releaseDate": "2026-10-21",
   "publisher": "SutharLabs",
+  "homepage": "https://sutharlabs.com",
   "author": "Suresh Suthar <mr.sutharsuresh@gmail.com>",
   "engines": {
-    "vscode": "^1.99.0"
+    "vscode": "^1.102.0"
   },
+  "extensionKind": ["workspace"],
   "categories": [
     "AI",
     "Other"
@@ -66,6 +69,11 @@
         "command": "jira-mcp.testConnection",
         "title": "Test JIRA Connection",
         "category": "JIRA MCP"
+      },
+      {
+        "command": "jira-mcp.refresh",
+        "title": "Refresh MCP Registration",
+        "category": "JIRA MCP"
       }
     ]
   },
@@ -73,15 +81,17 @@
     "onStartupFinished"
   ],
   "scripts": {
+    "vscode:prepublish": "npm run typecheck && npm run build",
     "build": "node esbuild.mjs",
     "watch": "node esbuild.mjs --watch",
     "package": "vsce package --no-dependencies",
     "lint": "eslint src --ext ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "npm run build && node --test test/*.test.cjs"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
-    "@types/vscode": "^1.99.0",
+    "@types/vscode": "~1.102.0",
     "@vscode/vsce": "^3.0.0",
     "esbuild": "^0.25.0",
     "typescript": "^5.4.0"

@@ -3,6 +3,7 @@ import axios, { type AxiosRequestConfig } from "axios";
 import * as fs from "fs";
 import * as path from "path";
 import * as os from "os";
+import { SERVER_VERSION } from "./version";
 
 const SECRET_KEY = "jira-mcp.pat";
 
@@ -138,6 +139,45 @@ const CONFIG_SECTION = "jira-mcp";
 
 let statusBarItem: vscode.StatusBarItem;
 let mcpChangeEmitter: vscode.EventEmitter<void>;
+let definitionRevision = 0;
+
+function refreshMcpDefinitions(reason: string): void {
+  definitionRevision += 1;
+  log(`MCP registration refreshed: ${reason}`);
+  mcpChangeEmitter.fire();
+}
+
+function createMcpDefinition(
+  context: vscode.ExtensionContext,
+  pat: string
+): vscode.McpStdioServerDefinition | undefined {
+  const config = vscode.workspace.getConfiguration(CONFIG_SECTION);
+  const jiraUrl = config.get<string>("jiraUrl")?.trim();
+  if (!jiraUrl) {
+    log("MCP registration unavailable: configure the JIRA URL.");
+    return undefined;
+  }
+
+  const serverPath = context.asAbsolutePath("dist/server.js");
+  const workspaceFolder =
+    vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? context.extensionPath;
+  const definition = new vscode.McpStdioServerDefinition(
+    "JIRA MCP",
+    process.execPath,
+    [serverPath],
+    {
+      ELECTRON_RUN_AS_NODE: "1",
+      JIRA_URL: jiraUrl,
+      JIRA_USERNAME: config.get<string>("username") || "",
+      WORKSPACE_FOLDER: workspaceFolder,
+      JIRA_TOKEN: pat.trim(),
+    },
+    `${SERVER_VERSION}.${definitionRevision}`
+  );
+  definition.cwd = vscode.Uri.file(workspaceFolder);
+  log(`MCP launch-ready definition: serverPath=${serverPath}, workspaceFolder=${workspaceFolder}; credentials supplied from SecretStorage`);
+  return definition;
+}
 
 export function activate(context: vscode.ExtensionContext): void {
   // Output channel — always created first so all subsequent code can log
@@ -175,54 +215,56 @@ export function activate(context: vscode.ExtensionContext): void {
     ),
     vscode.commands.registerCommand("jira-mcp.getToken", () =>
       getToken(context)
-    )
+    ),
+    vscode.commands.registerCommand("jira-mcp.refresh", () => {
+      refreshMcpDefinitions("requested by user");
+      return vscode.window.showInformationMessage(
+        "JIRA MCP: Registration refreshed. Start a new chat to use the updated definition. This does not restart an existing session's server."
+      );
+    })
   );
 
   // ── MCP server definition provider ────────────────────────────────────────
   mcpChangeEmitter = new vscode.EventEmitter<void>();
   context.subscriptions.push(mcpChangeEmitter);
+  context.subscriptions.push(
+    context.secrets.onDidChange((event) => {
+      if (event.key === SECRET_KEY) {
+        refreshMcpDefinitions("saved credentials changed");
+      }
+    }),
+    vscode.workspace.onDidChangeConfiguration((event) => {
+      if (event.affectsConfiguration(CONFIG_SECTION)) {
+        refreshMcpDefinitions("JIRA settings changed");
+      }
+    }),
+    vscode.workspace.onDidChangeWorkspaceFolders(() => {
+      refreshMcpDefinitions("workspace folders changed");
+    })
+  );
 
   context.subscriptions.push(
     vscode.lm.registerMcpServerDefinitionProvider("jira-mcp-provider", {
       onDidChangeMcpServerDefinitions: mcpChangeEmitter.event,
 
       async provideMcpServerDefinitions(_token) {
-        const config = vscode.workspace.getConfiguration(CONFIG_SECTION);
-        const jiraUrl = config.get<string>("jiraUrl") || "";
-        if (!jiraUrl) return [];
-
-        const username = config.get<string>("username") || "";
-        const serverPath = context.asAbsolutePath("dist/server.js");
-
-        // Resolve the active workspace folder so the MCP server can write
-        // attachments into it. Falls back to the extension's install dir if no
-        // folder is open (unusual, but shouldn't crash).
-        const workspaceFolder =
-          vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ??
-          context.extensionPath;
-        log(`MCP provideMcpServerDefinitions: jiraUrl=${jiraUrl}, serverPath=${serverPath}`);
-        log(`MCP provideMcpServerDefinitions: workspaceFolder=${workspaceFolder}`);
-
-        return [
-          new vscode.McpStdioServerDefinition(
-            "JIRA MCP",
-            process.execPath,
-            [serverPath],
-            {
-              ELECTRON_RUN_AS_NODE: "1",
-              JIRA_URL: jiraUrl,
-              JIRA_USERNAME: username,
-              WORKSPACE_FOLDER: workspaceFolder,
-              // PAT injected in resolveMcpServerDefinition
-              JIRA_TOKEN: "",
-            }
-          ),
-        ];
+        // Agent Host can forward this definition without invoking the resolver.
+        // Reading an existing secret here must never prompt for authentication.
+        const pat = await context.secrets.get(SECRET_KEY);
+        if (_token.isCancellationRequested) return [];
+        if (!pat?.trim()) {
+          log("MCP registration unavailable: no saved token. Run 'JIRA MCP: Configure JIRA Connection'.");
+          return [];
+        }
+        const definition = createMcpDefinition(context, pat);
+        return definition ? [definition] : [];
       },
 
       async resolveMcpServerDefinition(server, _token) {
         const pat = await context.secrets.get(SECRET_KEY);
-        if (!pat) {
+        if (_token.isCancellationRequested) return undefined;
+        if (!pat?.trim()) {
+          log("MCP resolution aborted: no saved token.");
           vscode.window
             .showWarningMessage(
               "JIRA MCP: No PAT configured. Run 'JIRA MCP: Configure JIRA Connection'.",
@@ -235,21 +277,8 @@ export function activate(context: vscode.ExtensionContext): void {
         }
 
         if (server instanceof vscode.McpStdioServerDefinition) {
-          const config = vscode.workspace.getConfiguration(CONFIG_SECTION);
-          const jiraUrl = config.get<string>("jiraUrl") || "";
-          const username = config.get<string>("username") || "";
-          log(`MCP resolveMcpServerDefinition: injecting PAT for ${jiraUrl}`);
-          return new vscode.McpStdioServerDefinition(
-            server.label,
-            server.command,
-            server.args ?? [],
-            {
-              ...(server.env ?? {}),
-              JIRA_URL: jiraUrl,
-              JIRA_USERNAME: username,
-              JIRA_TOKEN: pat,
-            }
-          );
+          log("MCP resolveMcpServerDefinition: refreshing launch credentials.");
+          return createMcpDefinition(context, pat);
         }
         return server;
       },
@@ -286,6 +315,10 @@ async function runConfigure(context: vscode.ExtensionContext): Promise<void> {
           description: "Verify current credentials are working",
         },
         {
+          label: "$(refresh) Refresh MCP Registration",
+          description: "Refresh definitions for new chats; does not restart existing servers",
+        },
+        {
           label: "$(key) Update PAT",
           description: "Replace your Personal Access Token",
         },
@@ -312,6 +345,10 @@ async function runConfigure(context: vscode.ExtensionContext): Promise<void> {
 
     if (choice.label.includes("Test Connection")) {
       await runTestConnection(context);
+      return;
+    }
+    if (choice.label.includes("Refresh MCP Registration")) {
+      await vscode.commands.executeCommand("jira-mcp.refresh");
       return;
     }
     if (choice.label.includes("Update PAT")) {
@@ -381,7 +418,6 @@ async function promptForUrl(
     value.replace(/\/$/, ""),
     vscode.ConfigurationTarget.Global
   );
-  mcpChangeEmitter?.fire(); // URL changed — refresh MCP server list
   return value.replace(/\/$/, "");
 }
 
@@ -458,12 +494,11 @@ async function promptForPat(
 
         await context.secrets.store(SECRET_KEY, pat.trim());
         void syncForkConfigs(context, pat.trim());
-        mcpChangeEmitter?.fire(); // Notify VS Code to (re)start the MCP server
         const displayName: string =
           response.data?.displayName || username;
         log(`Connected as: ${displayName}`);
         vscode.window.showInformationMessage(
-          `JIRA MCP: Connected as ${displayName} ✓`
+          `JIRA MCP: Credentials verified as ${displayName}. Registration updated for new server launches. Start a new chat to use the updated credentials; existing servers may retain the old credentials.`
         );
         updateStatusBar(context);
       } catch (err: unknown) {
@@ -499,7 +534,6 @@ async function runClearCredentials(
     vscode.ConfigurationTarget.Global
   );
 
-  mcpChangeEmitter?.fire(); // Notify VS Code to stop the MCP server
   updateStatusBar(context);
   vscode.window.showInformationMessage("JIRA MCP: Credentials cleared.");
 }
@@ -543,8 +577,9 @@ async function runTestConnection(
           config.get<string>("username") ||
           "Unknown";
         log(`Connected as: ${displayName}`);
+        refreshMcpDefinitions("JIRA connection test succeeded");
         vscode.window.showInformationMessage(
-          `JIRA MCP: Connected as ${displayName} ✓`
+          `JIRA MCP: JIRA API connection verified as ${displayName}. MCP startup is verified separately in chat.`
         );
         updateStatusBar(context, true);
       } catch (err: unknown) {
@@ -592,8 +627,10 @@ async function updateStatusBar(
   const url = config.get<string>("jiraUrl");
 
   if (forceConnected === true || (pat && url)) {
-    statusBarItem.text = "$(check) JIRA: Connected";
-    statusBarItem.tooltip = `JIRA MCP Server — ${url}\nClick to reconfigure`;
+    statusBarItem.text = forceConnected === true
+      ? "$(check) JIRA: API verified"
+      : "$(check) JIRA: Configured";
+    statusBarItem.tooltip = `JIRA credentials — ${url}\nMCP process startup is verified separately in chat.\nClick to reconfigure`;
     statusBarItem.backgroundColor = undefined;
   } else {
     statusBarItem.text = "$(warning) JIRA: Not configured";
@@ -630,19 +667,35 @@ async function syncForkConfigs(
     context.extensionPath;
 
   const homedir = os.homedir();
-  const configFiles: { path: string; isClaude?: boolean; isGemini?: boolean }[] = [];
+  const configFiles: {
+    path: string;
+    isGemini?: boolean;
+    requireExistingFileOrDir?: string;
+  }[] = [];
 
-  // Antigravity
+  // Antigravity (global config root and app root)
+  configFiles.push({
+    path: path.join(homedir, ".gemini", "config", "mcp_config.json"),
+    isGemini: true
+  });
   configFiles.push({
     path: path.join(homedir, ".gemini", "antigravity", "mcp_config.json"),
     isGemini: true
   });
-  // KIRO
+
+  // Kiro (modern settings root and legacy Gemini root)
+  configFiles.push({
+    path: path.join(homedir, ".kiro", "settings", "mcp.json")
+  });
   configFiles.push({
     path: path.join(homedir, ".gemini", "kiro", "mcp_config.json"),
     isGemini: true
   });
-  // Cursor
+
+  // Cursor (modern ~/.cursor/mcp.json and legacy globalStorage)
+  configFiles.push({
+    path: path.join(homedir, ".cursor", "mcp.json")
+  });
   if (process.platform === "win32") {
     configFiles.push({
       path: path.join(process.env.APPDATA || "", "Cursor", "User", "globalStorage", "tongshuai.cursor-chat", "mcp_config.json")
@@ -656,22 +709,38 @@ async function syncForkConfigs(
       path: path.join(homedir, ".config", "Cursor", "User", "globalStorage", "tongshuai.cursor-chat", "mcp_config.json")
     });
   }
-  // Claude Desktop
+
+  // Claude Desktop (Windows, macOS, Linux)
   if (process.platform === "win32") {
     configFiles.push({
-      path: path.join(process.env.APPDATA || "", "Claude", "claude_desktop_config.json"),
-      isClaude: true
+      path: path.join(process.env.APPDATA || "", "Claude", "claude_desktop_config.json")
     });
   } else if (process.platform === "darwin") {
     configFiles.push({
-      path: path.join(homedir, "Library", "Application Support", "Claude", "claude_desktop_config.json"),
-      isClaude: true
+      path: path.join(homedir, "Library", "Application Support", "Claude", "claude_desktop_config.json")
+    });
+  } else {
+    configFiles.push({
+      path: path.join(homedir, ".config", "Claude", "claude_desktop_config.json")
     });
   }
+
+  // Claude Code CLI (~/.claude.json, active when Claude directory or config exists)
+  configFiles.push({
+    path: path.join(homedir, ".claude.json"),
+    requireExistingFileOrDir: path.join(homedir, ".claude")
+  });
 
   for (const item of configFiles) {
     const dir = path.dirname(item.path);
     if (!fs.existsSync(dir)) {
+      continue;
+    }
+    if (
+      item.requireExistingFileOrDir &&
+      !fs.existsSync(item.requireExistingFileOrDir) &&
+      !fs.existsSync(item.path)
+    ) {
       continue;
     }
 

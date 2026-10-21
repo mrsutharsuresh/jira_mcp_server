@@ -1,6 +1,5 @@
 import { JiraClient } from "../jira-client.js";
-
-const SERVER_VERSION = "1.0.0";
+import { SERVER_VERSION, RELEASE_DATE } from "../../version.js";
 
 export const getCurrentUserDefinition = {
   name: "get_current_user",
@@ -49,7 +48,7 @@ export async function getServerVersionHandler(
   return JSON.stringify(
     {
       version: SERVER_VERSION,
-      release_date: "2026-04-24",
+      release_date: RELEASE_DATE,
       features: [
         "search_issues",
         "get_issue",

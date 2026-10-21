@@ -1,6 +1,49 @@
 # Jira MCP Server — Release Notes
 
-## 🆕 What's New in v1.0.4 (Latest)
+## What's New in v1.0.5 (Latest)
+
+- Fix the observed Agent Host startup failure: forwarded server definitions now
+  contain the saved token before launch, without relying on the resolver callback.
+- Use package metadata for initialization and version-tool responses. Refresh is
+  also available in the JIRA status-bar menu. Credential updates refresh future
+  launch definitions; existing MCP processes may retain their old credentials.
+- Preserve VS Code SecretStorage and the editor-managed Local resolver. This fix
+  adds no credential files or automatic portable-configuration migration.
+- Refresh registrations when credentials, Jira settings, or workspace folders
+  change. Add **JIRA MCP: Refresh MCP Registration** for manual refresh.
+- Run in the workspace extension host for Remote SSH, WSL, and containers.
+- Distinguish "Configured" and "API verified" from a working MCP session.
+- Validate with 12 tests, including actual MCP initialization, 14-tool discovery,
+  and a read-only Jira call against a local fixture.
+- Require VS Code 1.102 or newer; packaging rebuilds and type-checks automatically.
+
+### Manual upgrade
+
+1. Uninstall version 1.0.4 from the remote extension host. Do not run
+   **Clear Saved Credentials** unless you intend to erase the saved token.
+2. Install `jira-mcp-1.0.5.vsix` using **Extensions: Install from VSIX...** in the
+   remote workspace window. Verify that the installed version is 1.0.5.
+   Do not substitute the gallery extension's **Install in SSH** action: it can
+   select the published version instead of your custom Windows VSIX. Use the
+   latest rebuilt 1.0.5 package because earlier custom builds share this version.
+3. Run **Developer: Reload Window**. The publisher, extension ID, settings, and
+   SecretStorage key are unchanged; if credentials are not retained by the
+   uninstall/install flow, configure them again.
+4. Run **JIRA MCP: Test JIRA Connection**, followed by
+   **JIRA MCP: Refresh MCP Registration**.
+5. Start a new chat and explicitly request the JIRA MCP `get_current_user` tool.
+   Confirm an actual successful tool result, not just an answer or status message.
+
+The regression tests do not exercise the installed VS Code Agent Host UI. This
+manual post-installation test is still required to confirm end-to-end forwarding
+in your VS Code build.
+
+For missing commands after remote installation,
+see [README troubleshooting](./README.md#troubleshooting).
+
+Project website: [SutharLabs](https://sutharlabs.com).
+
+## 🆕 What's New in v1.0.4
 
 ### ☁️ Jira Cloud (Basic Auth / API Token) Support
 - **Dual-Authentication Core**: Expanded support to full **Jira Cloud** in addition to Jira Server/Data Center. The server now dynamically detects the connection URL. If it detects a Cloud instance (`.atlassian.net`), it automatically handles Basic Authentication (`email:API_token`), while self-hosted instances continue using secure Personal Access Tokens (`Bearer ${pat}`).

@@ -1,5 +1,38 @@
 # Changelog
 
+## [1.0.5] - 2026-10-21
+
+### Fixed
+- Derive initialization, version-tool, and registration versions from package
+  metadata; derive the version tool's release date from the same manifest.
+- Expose Refresh MCP Registration from the JIRA status-bar configuration menu.
+- Explain after credential updates that existing MCP processes can retain old
+  credentials and a new chat is needed.
+- Return launch-ready MCP definitions containing the existing SecretStorage token,
+  so Copilot/Agent Host forwarding does not launch with an empty `JIRA_TOKEN`.
+  Discovery remains non-interactive; missing credentials are logged and no unusable
+  server definition is returned.
+- Retain the Local-harness resolver and re-read credentials before editor-managed
+  startup, including after token rotation or removal.
+- Refresh definitions after credential, Jira setting, or workspace-folder changes.
+  Include an explicit working directory and a revision for tool-definition refresh.
+
+### Added
+- `JIRA MCP: Refresh MCP Registration` for workflows without restart controls.
+  This signals a definition change, not a guaranteed restart of an existing session.
+- Workspace extension-host placement for remote installations.
+- Twelve regression tests, including an actual stdio MCP initialization, discovery
+  of all 14 tools, and an authenticated read-only call against a loopback fixture.
+
+### Changed
+- Require VS Code 1.102 or newer and compile against its stable MCP API types.
+- Distinguish saved configuration and successful Jira API tests from MCP startup
+  in the status bar, notifications, and setup documentation.
+- Rebuild and type-check automatically when packaging; align the MCP server's
+  reported version with extension version 1.0.5.
+- Keep the extension identity, SecretStorage key, Jira authentication logic, tool
+  behavior, and existing fork/client configuration synchronization unchanged.
+
 ## [1.0.4] — 2026-05-19
 
 ### Added

@@ -9,7 +9,10 @@ node_modules/
 *.webp
 VSCODE-EXTENSION-CONTEXT.md
 test-mcp.mjs
+test/
+*.vsix
 jira-attachments/
 *.zip
+*.patch
 npm-debug.log
 Full_Size_Icon.webp

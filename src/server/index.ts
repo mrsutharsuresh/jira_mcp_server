@@ -3,6 +3,7 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { z } from "zod";
 import { JiraClient } from "./jira-client.js";
 import { getAllDefinitions, dispatch } from "./tools/index.js";
+import { SERVER_VERSION } from "../version.js";
 
 // ─── Environment validation ───────────────────────────────────────────────────
 
@@ -29,7 +30,7 @@ async function main(): Promise<void> {
 
   const server = new McpServer({
     name: "jira-mcp",
-    version: "1.0.0",
+    version: SERVER_VERSION,
   });
 
   // Register all tools dynamically from the registry
